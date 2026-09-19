@@ -133,7 +133,7 @@ Project 下的 Git 仓库。模型支持一个 Project 对应多个 Repository�
 - `GET /api/projects/:project_id/events`
 - Task 创建、查询和关联确认接口
 
-CLI 和 Web 只调用后端 API，不直接写数据库。Web 不读取 CLI 本地配置；浏览器 token 由用户在运行时输入并保存在 `sessionStorage`。
+CLI 和 Web 的正式工作流只调用后端 API，不直接写数据库。Web 不读取 CLI 本地配置；浏览器 token 由用户在运行时输入并保存在 `sessionStorage`。为便于本地视觉验收，Web 另提供隔离的 Demo 账号：该模式完全使用浏览器 `sessionStorage` 中的 mock 项目，不发送 API 请求，也不代表后端事实。
 
 ## 模块职责
 

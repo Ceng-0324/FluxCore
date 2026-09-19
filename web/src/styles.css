@@ -61,11 +61,11 @@ h1 { margin-bottom: 9px; font-size: 42px; line-height: 1; letter-spacing: 0; }
 .modal { width: min(460px, 100%); padding: 25px; border: 1px solid #dfe6df; border-radius: 8px; background: #fbfcfa; box-shadow: 0 20px 60px rgb(31 43 42 / 18%); }
 .modal-heading { display: flex; justify-content: space-between; align-items: start; margin-bottom: 27px; }
 .modal h2 { margin: 0; font-size: 24px; letter-spacing: 0; }
-.modal label, .token-form label { display: block; margin: 0 0 7px; color: #51625b; font-size: 12px; font-weight: 700; }
+.modal label, .token-form label, .demo-form label { display: block; margin: 0 0 7px; color: #51625b; font-size: 12px; font-weight: 700; }
 .modal label span { color: #a4afaa; font-weight: 400; }
-.modal input, .modal textarea, .token-form input { width: 100%; margin-bottom: 18px; padding: 11px 12px; border: 1px solid #d1ddd4; border-radius: 5px; outline: none; color: #1f2b2a; background: #fff; font-size: 13px; }
+.modal input, .modal textarea, .token-form input, .demo-form input { width: 100%; margin-bottom: 18px; padding: 11px 12px; border: 1px solid #d1ddd4; border-radius: 5px; outline: none; color: #1f2b2a; background: #fff; font-size: 13px; }
 .modal textarea { resize: vertical; line-height: 1.6; }
-.modal input:focus, .modal textarea:focus, .token-form input:focus { border-color: #6d9f8b; box-shadow: 0 0 0 3px #e2eee5; }
+.modal input:focus, .modal textarea:focus, .token-form input:focus, .demo-form input:focus { border-color: #6d9f8b; box-shadow: 0 0 0 3px #e2eee5; }
 .modal-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 4px; }
 .form-error { margin: -5px 0 16px; color: #a15442; font-size: 12px; }
 .auth-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #edf2ed; }
@@ -76,6 +76,16 @@ h1 { margin-bottom: 9px; font-size: 42px; line-height: 1; letter-spacing: 0; }
 .token-form input { margin-bottom: 14px; }
 .token-form .primary-button { width: 100%; display: flex; justify-content: center; align-items: center; }
 .auth-footnote { margin: 27px 0 0; color: #9aa8a1; font-size: 11px; }
+.auth-divider { position: relative; margin: 31px 0 28px; border-top: 1px solid #dfe6df; text-align: center; }
+.auth-divider span { position: relative; top: -9px; padding: 0 10px; color: #a1ada6; background: #fbfcfa; font-size: 11px; }
+.demo-login { padding-top: 1px; }
+.demo-login .eyebrow { margin-bottom: 8px; color: #80651e; }
+.demo-login h2 { margin: 0 0 8px; color: #2e403a; font-size: 20px; }
+.demo-copy { margin-bottom: 22px; color: #71817a; font-size: 12px; line-height: 1.65; }
+.demo-form input { margin-bottom: 13px; }
+.demo-button { width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px; }
+.demo-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; padding: 12px 14px; border: 1px solid #dfd3b4; border-radius: 6px; color: #80651e; background: #faf5e8; font-size: 12px; line-height: 1.6; }
+.demo-banner .text-button { color: #80651e; flex-shrink: 0; }
 .spin { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 720px) { .sidebar { width: 64px; padding: 22px 9px; align-items: center; } .sidebar-brand { padding: 0; } .sidebar-brand > span:last-child, .nav-item:not(.active)::after, .nav-item { font-size: 0; } .nav-item { width: 42px; padding: 11px 9px; justify-content: center; } .sidebar-footer { display: none; } .content-shell { padding: 35px 22px 60px; } .page-header { align-items: start; flex-direction: column; gap: 22px; padding-bottom: 28px; } .primary-button.compact { align-self: stretch; } .auth-panel { padding: 32px 25px; } h1 { font-size: 34px; } }

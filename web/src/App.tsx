@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   ArrowRight,
@@ -10,8 +10,18 @@ import {
   X,
 } from "lucide-react";
 import { APIError, createProject, listProjects, Project } from "./lib/api";
+import {
+  clearDemoSession,
+  createDemoProject,
+  DEMO_EMAIL,
+  DEMO_PASSWORD,
+  isDemoSession,
+  readDemoProjects,
+  startDemoSession,
+} from "./lib/mock";
 
 const TOKEN_STORAGE_KEY = "fluxcore.api_token";
+type AuthMode = "token" | "demo" | null;
 
 function readStoredToken(): string {
   return sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
@@ -20,53 +30,94 @@ function readStoredToken(): string {
 function App() {
   const [token, setToken] = useState(readStoredToken);
   const [tokenDraft, setTokenDraft] = useState(readStoredToken);
+  const [authMode, setAuthMode] = useState<AuthMode>(() => {
+    if (isDemoSession()) return "demo";
+    return readStoredToken() ? "token" : null;
+  });
+  const [demoEmailDraft, setDemoEmailDraft] = useState(DEMO_EMAIL);
+  const [demoPasswordDraft, setDemoPasswordDraft] = useState(DEMO_PASSWORD);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const requestVersion = useRef(0);
 
   const loadProjects = useCallback(async () => {
-    if (!token) return;
+    if (!authMode) return;
+    const version = ++requestVersion.current;
     setLoading(true);
     setError(null);
     try {
+      if (authMode === "demo") {
+        setProjects(readDemoProjects());
+        return;
+      }
+
+      if (!token) return;
       const response = await listProjects(token);
+      if (version !== requestVersion.current) return;
       setProjects(response.projects);
     } catch (requestError) {
+      if (version !== requestVersion.current) return;
       if (requestError instanceof APIError && requestError.status === 401) {
         sessionStorage.removeItem(TOKEN_STORAGE_KEY);
         setToken("");
         setTokenDraft("");
+        setAuthMode(null);
+        setProjects([]);
         setError("API token 无效或已失效，请重新输入。");
       } else {
         setError(requestError instanceof Error ? requestError.message : "项目加载失败");
       }
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
-  }, [token]);
+  }, [authMode, token]);
 
   useEffect(() => {
     void loadProjects();
+    return () => { requestVersion.current += 1; };
   }, [loadProjects]);
 
   function saveToken(event: FormEvent) {
     event.preventDefault();
     const nextToken = tokenDraft.trim();
     if (!nextToken) return;
+    clearDemoSession();
     sessionStorage.setItem(TOKEN_STORAGE_KEY, nextToken);
     setError(null);
     setToken(nextToken);
+    setAuthMode("token");
+  }
+
+  function saveDemoSession(event: FormEvent) {
+    event.preventDefault();
+    if (demoEmailDraft.trim() !== DEMO_EMAIL || demoPasswordDraft !== DEMO_PASSWORD) {
+      setError("Demo 账号或密码不正确。");
+      return;
+    }
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    startDemoSession();
+    setToken("");
+    setTokenDraft("");
+    setError(null);
+    setAuthMode("demo");
   }
 
   function signOut() {
+    requestVersion.current += 1;
     sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    clearDemoSession();
     setToken("");
     setTokenDraft("");
+    setAuthMode(null);
     setProjects([]);
+    setShowCreate(false);
+    setError(null);
+    setLoading(false);
   }
 
-  if (!token) {
+  if (!authMode) {
     return (
       <main className="auth-shell">
         <section className="auth-panel" aria-labelledby="token-title">
@@ -88,8 +139,33 @@ function App() {
               进入控制台 <ArrowRight size={16} aria-hidden="true" />
             </button>
           </form>
-          {error && <p className="form-error">{error}</p>}
+          {error && <p className="form-error" role="alert">{error}</p>}
           <p className="auth-footnote">token 仅保存在当前浏览器会话中。</p>
+          <div className="auth-divider"><span>或</span></div>
+          <div className="demo-login">
+            <p className="eyebrow">LOCAL DEMO</p>
+            <h2>查看演示工作区</h2>
+            <p className="demo-copy">使用预置的本地 mock 数据，不会连接后端或修改真实项目。</p>
+            <form className="demo-form" onSubmit={saveDemoSession}>
+              <label htmlFor="demo-email">Demo 账号</label>
+              <input
+                id="demo-email"
+                type="email"
+                value={demoEmailDraft}
+                onChange={(event) => setDemoEmailDraft(event.target.value)}
+              />
+              <label htmlFor="demo-password">Demo 密码</label>
+              <input
+                id="demo-password"
+                type="text"
+                value={demoPasswordDraft}
+                onChange={(event) => setDemoPasswordDraft(event.target.value)}
+              />
+              <button className="secondary-button demo-button" type="submit">
+                进入演示 <ArrowRight size={15} aria-hidden="true" />
+              </button>
+            </form>
+          </div>
         </section>
       </main>
     );
@@ -104,8 +180,8 @@ function App() {
           <button className="nav-item" type="button" disabled><Activity size={17} aria-hidden="true" />活动流</button>
         </nav>
         <div className="sidebar-footer">
-          <span className="connection-dot" />本机服务已连接
-          <button className="text-button" type="button" onClick={signOut}><LogOut size={12} aria-hidden="true" />退出 token</button>
+          <span><span className="connection-dot" />{authMode === "demo" ? "演示数据" : "本机服务已连接"}</span>
+          <button className="text-button" type="button" onClick={signOut}><LogOut size={12} aria-hidden="true" />{authMode === "demo" ? "退出演示" : "退出 token"}</button>
         </div>
       </aside>
 
@@ -120,6 +196,13 @@ function App() {
             <Plus size={16} aria-hidden="true" /> 新建项目
           </button>
         </header>
+
+        {authMode === "demo" && (
+          <div className="demo-banner" role="status">
+            <span>Demo 工作区 · 全部为演示数据，修改仅保留在当前标签页会话。</span>
+            <button className="text-button" type="button" onClick={signOut}>退出 Demo</button>
+          </div>
+        )}
 
         {error && (
           <div className="error-banner" role="alert">
@@ -146,6 +229,7 @@ function App() {
       {showCreate && (
         <CreateProjectDialog
           token={token}
+          demoMode={authMode === "demo"}
           onClose={() => setShowCreate(false)}
           onCreated={(project) => {
             setProjects((current) => [...current, project].sort((a, b) => a.id - b.id));
@@ -189,7 +273,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   );
 }
 
-function CreateProjectDialog({ token, onClose, onCreated }: { token: string; onClose: () => void; onCreated: (project: Project) => void }) {
+function CreateProjectDialog({ token, demoMode, onClose, onCreated }: { token: string; demoMode: boolean; onClose: () => void; onCreated: (project: Project) => void }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
@@ -201,8 +285,13 @@ function CreateProjectDialog({ token, onClose, onCreated }: { token: string; onC
     setSaving(true);
     setError(null);
     try {
-      const response = await createProject(token, { name: name.trim(), description: description.trim() });
-      onCreated({ ...response.project, repository_count: 0 });
+      const input = { name: name.trim(), description: description.trim() };
+      if (demoMode) {
+        onCreated(createDemoProject(input));
+      } else {
+        const response = await createProject(token, input);
+        onCreated({ ...response.project, repository_count: 0 });
+      }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "项目创建失败");
     } finally {

@@ -144,8 +144,19 @@ API_TOKEN=local-dev-token go run .
 # 启动前端（新终端窗口）
 cd web
 npm install && npm run dev
+```
 
-# 安装 CLI
+不启动后端也可以直接查看 Web 工作区：在登录页使用本地 Demo 账号。
+
+```text
+账号：demo@fluxcore.local
+密码：fluxcore-demo
+```
+
+Demo 仅用于本地预览，项目列表和新建项目都使用当前浏览器会话中的 mock 数据，不会写入后端数据库。
+
+```bash
+# 安装 CLI（从仓库根目录执行）
 cd cli
 go install .
 

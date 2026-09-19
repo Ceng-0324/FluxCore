@@ -57,6 +57,7 @@ FluxCore 不替代 Jira、Linear、Notion 或 CI 平台，也不把 README 当�
 - [x] 运行时 token 接入，token 仅保存于 `sessionStorage`
 - [x] 项目列表、仓库数量、加载/空/错误状态
 - [x] 创建项目弹窗
+- [x] 本地 Demo 账号和 mock 项目工作区（不连接后端）
 - [x] 阶段一真实工作流验收：`init → link → status → Web 展示`
 
 ### 阶段二：Git 事实采集与可靠投递

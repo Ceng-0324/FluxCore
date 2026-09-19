@@ -145,8 +145,19 @@ API_TOKEN=local-dev-token go run .
 # Start the frontend (in a new terminal)
 cd web
 npm install && npm run dev
+```
 
-# Install the CLI
+The Web console can also be previewed without starting the backend. Use the local Demo account on the login page:
+
+```text
+Account: demo@fluxcore.local
+Password: fluxcore-demo
+```
+
+Demo mode is for local preview only. The project list and new projects use mock data in the current browser session and never write to the backend database.
+
+```bash
+# Install the CLI (from the repository root)
 cd cli
 go install .
 

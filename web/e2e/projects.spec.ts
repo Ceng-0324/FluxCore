@@ -56,6 +56,61 @@ test("requires a runtime API token", async ({ page }) => {
   await expect(page.getByText("token 仅保存在当前浏览器会话中。")).toBeVisible();
 });
 
+test("enters the isolated demo workspace without API requests", async ({ page }) => {
+  const apiRequests: string[] = [];
+  page.on("request", (request) => {
+    if (["fetch", "xhr"].includes(request.resourceType())) apiRequests.push(request.url());
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "进入演示" }).click();
+
+  await expect(page.getByRole("heading", { name: "Atlas Notes" })).toBeVisible();
+  await expect(page.getByText("演示数据", { exact: true })).toBeVisible();
+  expect(apiRequests).toHaveLength(0);
+
+  await page.getByRole("button", { name: "新建项目" }).click();
+  await page.getByLabel("项目名称").fill("Demo Archive");
+  await page.getByLabel("描述 可选").fill("只存在于浏览器会话中的项目");
+  await page.getByRole("dialog").getByRole("button", { name: "创建项目" }).click();
+
+  await expect(page.getByRole("heading", { name: "Demo Archive" })).toBeVisible();
+  await page.getByRole("button", { name: "刷新" }).click();
+  await expect(page.getByRole("heading", { name: "Demo Archive" })).toBeVisible();
+  expect(apiRequests).toHaveLength(0);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Demo Archive" })).toBeVisible();
+  expect(apiRequests).toHaveLength(0);
+});
+
+test("validates demo credentials and isolates logout from token login", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Demo 密码").fill("wrong-password");
+  await page.getByRole("button", { name: "进入演示" }).click();
+  await expect(page.getByRole("alert")).toHaveText("Demo 账号或密码不正确。");
+  await page.getByLabel("Demo 密码").fill("fluxcore-demo");
+  await page.getByRole("button", { name: "进入演示" }).click();
+  await expect(page.getByRole("heading", { name: "Atlas Notes" })).toBeVisible();
+  await page.getByRole("button", { name: "退出 Demo", exact: true }).click();
+  await page.reload();
+  await expect(page.getByLabel("API token")).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("fluxcore.demo_session"))).toBeNull();
+
+  await page.route("**/api/projects", async (route) => {
+    expect(route.request().headers().authorization).toBe("Bearer real-test-token");
+    await route.fulfill({ json: { projects: [] } });
+  });
+  await page.getByLabel("API token").fill("real-test-token");
+  await page.getByRole("button", { name: "进入控制台" }).click();
+  await expect(page.getByRole("heading", { name: "还没有项目" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Atlas Notes" })).toHaveCount(0);
+  await page.getByRole("button", { name: "退出 token" }).click();
+  await page.getByRole("button", { name: "进入演示" }).click();
+  await expect(page.getByRole("heading", { name: "Atlas Notes" })).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("fluxcore.api_token"))).toBeNull();
+});
+
 test("lists and creates projects", async ({ page }) => {
   await prepareProjectAPI(page);
   await page.goto("/");
@@ -84,5 +139,17 @@ test.describe("mobile layout", () => {
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     );
     expect(hasHorizontalOverflow).toBe(false);
+  });
+
+  test("keeps demo mode visible and allows logout", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "进入演示" }).click();
+    await expect(page.getByRole("status")).toContainText("全部为演示数据");
+    await expect(page.getByRole("heading", { name: "Paper Trail" })).toBeVisible();
+    expect(await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    )).toBe(false);
+    await page.getByRole("button", { name: "退出 Demo", exact: true }).click();
+    await expect(page.getByLabel("Demo 账号")).toBeVisible();
   });
 });
