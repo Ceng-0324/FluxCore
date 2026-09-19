@@ -20,7 +20,7 @@ const maxJSONBodyBytes = 1 << 20
 
 type projectService interface {
 	CreateProject(service.CreateProjectInput) (model.Project, error)
-	ListProjects() ([]model.Project, error)
+	ListProjects() ([]service.ProjectListItem, error)
 	CreateRepository(uint, service.CreateRepositoryInput) (model.Repository, error)
 	ListRepositories(uint) ([]model.Repository, error)
 }

@@ -1,3 +1,16 @@
 # Reference
 CLAUDE.md
 docs/ISSUES_TEMPLATE.md
+
+# Local state
+.fluxcore/
+*.db
+*.db-shm
+*.db-wal
+
+# Web build output
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
+web/playwright-report/
+web/test-results/
