@@ -142,7 +142,7 @@ func TestCreateProject(t *testing.T) {
 
 func TestListProjects(t *testing.T) {
 	router, _ := newTestRouter(t)
-	createProject(t, router, "FluxCore")
+	projectID := createProject(t, router, "FluxCore")
 
 	recorder := performJSONRequest(router, http.MethodGet, "/api/projects", testAuthorizationHeader(), nil)
 
@@ -152,7 +152,8 @@ func TestListProjects(t *testing.T) {
 
 	var response struct {
 		Projects []struct {
-			Name string `json:"name"`
+			Name            string `json:"name"`
+			RepositoryCount int64  `json:"repository_count"`
 		} `json:"projects"`
 	}
 	decodeResponse(t, recorder, &response)
@@ -162,6 +163,16 @@ func TestListProjects(t *testing.T) {
 	}
 	if response.Projects[0].Name != "FluxCore" {
 		t.Fatalf("projects[0].name = %q, want %q", response.Projects[0].Name, "FluxCore")
+	}
+	if response.Projects[0].RepositoryCount != 0 {
+		t.Fatalf("projects[0].repository_count = %d, want 0", response.Projects[0].RepositoryCount)
+	}
+
+	createRepository(t, router, projectID, "server", "/tmp/fluxcore-server", "git@example.com:team/server.git")
+	recorder = performJSONRequest(router, http.MethodGet, "/api/projects", testAuthorizationHeader(), nil)
+	decodeResponse(t, recorder, &response)
+	if response.Projects[0].RepositoryCount != 1 {
+		t.Fatalf("projects[0].repository_count = %d, want 1", response.Projects[0].RepositoryCount)
 	}
 }
 

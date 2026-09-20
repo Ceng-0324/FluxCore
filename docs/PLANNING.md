@@ -1,188 +1,119 @@
 # FluxCore 项目规划
 
-> 当前项目处于规划阶段。所有任务状态均为 **未开始**，需经逐步讨论确认后推进。
+> 本文记录产品方向与交付进度。当前实现事实以代码、数据库和 Git 历史为准；本文用于解释目标与阶段边界，不替代运行时事实。
 
 ## 项目定位
 
-FluxCore 的功能落点不是传统项目管理工具，而是面向个人开发者与多项目并发开发者的 **Git 原生研发状态记录系统**。
+FluxCore 是面向个人开发者和多项目并发开发者的 **Git 原生研发状态记录系统**。它把开发者自然产生的 commit、分支、push 结果和显式开发意图转成可查询的项目状态、活动记录与恢复上下文。
 
-核心目标是把开发者已经自然产生的 `commit`、`push`、README 变更、分支、任务 ID 与开发意图，自动转化为项目状态、任务进度、活动日志、实时仪表盘与多项目上下文。
+FluxCore 不替代 Jira、Linear、Notion 或 CI 平台，也不把 README 当作项目状态数据库。核心价值是让代码流形成可信的项目事实，再在其上提供语义关联与下一步建议。
 
-产品边界应保持清晰：FluxCore 不替代 Jira、Linear、Notion 或 CI 平台，而是让代码流自动变成项目流。
+## 产品原则
 
-## 技术栈总览（已确定）
+- **Local-first**：v0.1 只保证本机单用户使用，默认 SQLite 和本机 Bearer token。
+- **Fact-first**：commit 是最准确的开发事实；push、分支和后续远端事件分别记录来源与确认级别。
+- **Explicit semantics**：commit message 和分支名只提供低置信度 Task 信号，不自动创建或推进 Task。
+- **Optional intent**：Intent Snapshot 可选，不应成为新的手工填报负担。
+- **Derived views**：Workstream 使用多维投影，不用一个互斥枚举压缩活动、发布和风险状态。
+- **Machine metadata**：后续使用经过 schema 校验的 `fluxcore.yaml` 承载显式项目元数据；README 只作为低可信观察信号。
 
-| 层级 | 技术选型 | 职责 |
+## 技术栈
+
+| 层级 | 技术选型 | 当前职责 |
 | :--- | :--- | :--- |
-| CLI | Go (Cobra) | Git Hook 注入、本地上下文管理、项目切换 |
-| 后端 | Go (Gin) | REST API、Webhook 处理、WebSocket 广播 |
-| ORM | GORM | 数据持久化，SQLite/PostgreSQL 动态切换 |
-| 数据库 | SQLite / PostgreSQL | 开发 SQLite（零配置），生产可切 PostgreSQL |
-| 消息 | Redis | WebSocket Pub/Sub 实时事件分发 |
-| 前端 | React 19 + Vite 6 | SPA 仪表盘 |
-| 样式 | Tailwind CSS | 原子化 CSS |
+| CLI | Go + Cobra | 本地初始化、项目绑定、状态检查；事件采集后续实现 |
+| 后端 | Go + Gin | REST API、认证、领域持久化 |
+| ORM | GORM | SQLite/PostgreSQL 数据访问 |
+| 数据库 | SQLite / PostgreSQL | v0.1 默认 SQLite，保留 PostgreSQL 兼容 |
+| 前端 | React 19 + Vite 6 + TypeScript | 本地 Web 控制台 |
+| 样式 | Tailwind CSS + 项目样式层 | 构建克制、可扫描的工作台界面 |
+| 实时分发 | Redis + WebSocket | 后续阶段引入，不是 v0.1 本地闭环前置条件 |
 
-## 开发路线
+## 当前进度
 
-v0.1 开发前需先确认 [ARCHITECTURE.md](ARCHITECTURE.md) 中的架构基线，再进入具体代码实现。
+### 阶段一：基础设施与本地绑定
 
-### 阶段一 — 基础设施与无感绑定
-
-> 目标：搭建基础环境，打通 CLI ↔ 后端连接，实现项目本地绑定。
+目标：打通 CLI、后端和 Web 的本地基础链路。
 
 **后端**
-- [ ] 初始化 Go 模块，引入 Gin 框架
-- [ ] 配置 GORM，实现基于 `DB_TYPE` 环境变量的 SQLite/PostgreSQL 动态切换
-- [ ] 定义 `Project`、`Repository`、`User`、`Config` 基础数据模型
-- [ ] 实现 `POST /api/projects`、`GET /api/projects` 与项目仓库绑定接口
-- [ ] 添加健康检查与基础认证中间件
+
+- [x] 初始化 Go 模块和 Gin 服务
+- [x] SQLite/PostgreSQL 动态配置与 GORM 连接
+- [x] `Project`、`Repository`、`User`、`Config` 基础模型
+- [x] 项目与仓库创建、查询 API
+- [x] 健康检查和本地单用户 token 认证
+- [x] 项目列表聚合 `repository_count`，避免 Web N+1 请求
 
 **CLI**
-- [ ] 实现 `fluxcore init` — 在项目中初始化 `.fluxcore/` 配置目录
-- [ ] 实现 `fluxcore link` — 读取 `.git/config`，生成本地项目映射
-- [ ] 添加 `fluxcore status` — 显示当前项目绑定状态
 
-**前端**
-- [ ] 搭建 React + Vite + Tailwind 基础框架
-- [ ] 构建项目列表视图与空状态页
-- [ ] 实现项目创建弹窗
+- [x] `fluxcore init`
+- [x] `fluxcore link`
+- [x] `fluxcore status`
+- [ ] Git 事件采集与本地 outbox（阶段二）
 
-### 阶段二 — Git 事件驱动与自动化日志
+**Web**
 
-> 目标：实现“推送即记录”，建立 FluxCore 的核心数据来源。
+- [x] React、Vite、TypeScript 和 Tailwind 工程骨架
+- [x] 运行时 token 接入，token 仅保存于 `sessionStorage`
+- [x] 项目列表、仓库数量、加载/空/错误状态
+- [x] 创建项目弹窗
+- [x] 本地 Demo 账号和 mock 项目工作区（不连接后端）
+- [x] 阶段一真实工作流验收：`init → link → status → Web 展示`
 
-**后端**
-- [ ] 开发本地事件接收接口，接收 CLI 从 Git Hook 上报的 commit 事件
-- [ ] 开发 Commit Message 解析器（正则匹配 `#TaskID`、Conventional Commit 类型）
-- [ ] 从解析结果自动创建结构化日志条目
-- [ ] 实现 `Event` 模型，作为 commit、task、README、CI、intent 等后续事件的统一事实表
-- [ ] 实现 `Task` 模型与状态机（Open → In Progress → Testing → Done）
+### 阶段二：Git 事实采集与可靠投递
 
-**CLI**
-- [ ] 通过 `fluxcore init` 自动注入 `post-commit` Hook
-- [ ] 添加 `fluxcore log` — 终端查看近期活动
+目标：先可靠记录事实，再建立语义关联。
 
-**前端**
-- [ ] 构建项目详情页，展示任务列表与日志时间轴
-- [ ] 添加提交类型标签（feat / fix / refactor / chore）
+**事实与同步**
 
-### 阶段三 — README 驱动同步与实时推送
+- [ ] `Event` 事实表和幂等键
+- [ ] commit 采集：`post-commit` hook 只触发 CLI，不阻塞 Git
+- [ ] 本地 outbox：`pending / sent / accepted / failed`
+- [ ] 服务不可用时持久化待投递事件并自动补发
+- [ ] push 结果采集方案：优先评估 `fluxcore push` 包装命令；标准 Git 没有客户端 `post-push` hook，`pre-push` 不能证明 push 成功
+- [ ] 活动查询 API 与 Web 项目详情时间线
 
-> 目标：引入 Redis，实现文档变更即时反映。
+**Task 语义**
 
-**后端**
-- [ ] 集成 Redis，建立 WebSocket 广播管线
-- [ ] 监听推送中的 `README.md` 变更，解析 Front Matter（`status`、`version`、`description`）
-- [ ] 自动从 README 元数据更新项目卡片
+- [ ] 显式创建 Task 或确认 Task 关联
+- [ ] commit message、分支名仅生成待确认的关联信号
+- [ ] 不从低置信度文本自动创建 Task
+- [ ] 不因 commit 或 push 自动推进 Task 状态
 
-**前端**
-- [ ] 接入 WebSocket，实现项目卡片与日志流的无刷新实时更新
-- [ ] 添加实时状态指示器（在线 / 同步中 / 离线）
-- [ ] 实现事件到达 Toast 通知
+### 阶段三：元数据与开发流投影
 
-### 阶段四 — 多项目并发与开发态势监控
+目标：在可信事实层上形成可解释的状态视图。
 
-> 目标：解决多项目、多分支、多任务并行开发下的上下文切换、状态判断与风险识别问题。
+- [ ] 定义并校验 `fluxcore.yaml` schema
+- [ ] README 变更仅作为观察事件，不直接覆盖 Project 状态
+- [ ] 建立 Workstream 多维投影：activity、publication、risk、suggested_action
+- [ ] Web 项目详情与 Workstream 视图
+- [ ] 按本地需求评估 WebSocket；Redis 仅在需要跨进程分发时引入
 
-**CLI**
-- [ ] 实现 `fluxcore switch <project>` — 自动切换工作目录并恢复上下文
-- [ ] 添加 `fluxcore dashboard` — 从终端打开 Web UI
+### 阶段四：上下文恢复与远端确认
 
-**前端**
-- [ ] 构建全局仪表盘，聚合所有项目实时动态流
-- [ ] 集成 CI 状态展示（构建成功/失败徽标）
-- [ ] 添加项目级筛选、排序与搜索
-- [ ] 构建 Workstream Radar（开发流雷达）视图
+- [ ] `resume` 恢复动作：展示上次意图、最后事实和建议下一步
+- [ ] 是否提供 CLI `fluxcore resume` 在 Web 工作流稳定后决定
+- [ ] GitHub/GitLab/Gitea 远端事件适配
+- [ ] push、merge、CI 的远端确认状态
+- [ ] 搜索、筛选和多项目聚合
 
-### 阶段五 — 智能化与生态完善
+`switch` 不再作为产品核心概念。切换目录只是实现手段，真正的用户价值是恢复上下文，因此统一使用 `resume` 语义。
 
-> 目标：引入 AI 辅助，完善部署与通知生态。
+### 阶段五：可选智能能力
 
-- [ ] **AI 集成** — 分析 `git diff` 自动生成工作日报摘要
-- [ ] **插件系统** — 支持自定义 Webhook 处理器与事件处理器
-- [ ] **一键部署** — 提供 Docker Compose 一键部署方案
-- [ ] **通知推送** — 可选的 Slack / Discord / 邮件关键事件推送
+- [ ] 可选 Intent Snapshot
+- [ ] 基于事实与显式意图的 AI 摘要
+- [ ] 插件系统
+- [ ] 部署与通知集成
 
-## 产品创新方向
+AI 只负责总结、解释和建议，不写入底层事实真值。
 
-### Intent Snapshot（开发意图快照）
+## 下一步
 
-> 核心定位：FluxCore 不只记录“做了什么”，还应保留“为什么做”。该方向作为阶段二之后、阶段五 AI 能力之前的增强层，不影响当前 MVP 推进顺序。
+1. 完成阶段一真实联调和 Web 视觉验收。
+2. 合并当前 Web 功能分支到 `develop`。
+3. 设计 Event、幂等键和本地 outbox 契约。
+4. 单独决策 push 成功观测方式，再开始 Git 事件实现。
 
-**概念说明**
-- 开发者可在开始一个任务、分支或阶段时，记录一条轻量开发意图，例如：`fluxcore intent "重构认证模块，拆分 token 校验和用户加载逻辑"`。
-- FluxCore 后续自动关联该意图与当前分支、commit、diff、README 变更、任务状态和活动日志。
-- Web UI 展示时，不只呈现零散 commit，而是形成“开发意图 → 实际变更 → 当前状态 → 阶段总结”的连续上下文。
-
-**正向价值**
-- 强化 FluxCore 的产品差异化：从 commit 日志看板升级为个人开发记忆系统。
-- 适配多项目并发场景：开发者切回旧项目时，可快速理解上次修改的目标、范围与未完成事项。
-- 为后续 AI 摘要提供高质量上下文：AI 不只基于 diff 推断，还能结合明确的开发意图生成更准确的日报、阶段总结和风险提示。
-
-**潜在风险**
-- 若交互设计过重，可能重新变成手动填报，违背“无感记录”的核心理念。
-- 需要清晰定义 intent 与 branch、commit、task 的关联规则，否则容易出现上下文错配。
-- 早期不宜引入复杂 AI 判断，应先以轻量命令和确定性关联规则落地。
-
-### Workstream Radar（开发流雷达）
-
-> 核心定位：FluxCore 不只展示多项目动态，而是识别多并发开发流的状态、风险和恢复入口。
-
-**概念说明**
-- 每个活跃项目、分支、任务或开发意图都可抽象为一个 `Workstream`。
-- 核心对象从 `Project` 扩展为 `Project → Branch → Task → Intent → Event`。
-- 全局视图不只是项目卡片墙或 commit 活动流，而是回答“现在最应该关注哪个开发流，为什么”。
-
-**状态模型**
-- `Active`：近期有 commit、push、README 或任务状态变化。
-- `Idle`：一段时间无进展，但仍存在未关闭任务、未合并分支或未完成 intent。
-- `Blocked`：存在失败 CI、冲突风险、缺少后续动作或关键状态卡住。
-- `Diverged`：分支明显落后主干，继续开发或合并前需要同步。
-- `Ready to Resume`：可恢复开发，并能展示上次意图、最后变更与下一步建议。
-- `Ready to Merge`：功能完成度高，测试或合并是下一动作。
-
-**正向价值**
-- 从“展示日志”升级到“判断并发状态”，强化多项目场景下的产品价值。
-- 帮助开发者在项目切换时快速恢复上下文，减少多项目并行带来的认知成本。
-- 与 Intent Snapshot 天然结合，可判断实际变更是否仍符合最初开发意图。
-- 为后续 AI 能力提供明确落点：解释风险、总结上下文、建议下一步。
-
-**潜在风险**
-- 状态规则需要足够确定，避免因误报导致用户不信任雷达结果。
-- 早期不宜引入复杂评分系统，否则会拖慢 MVP。
-- UI 需要保持克制，避免变成复杂运维大屏或噪声密集的信息墙。
-
-## 目标目录结构
-
-```
-FluxCore/
-├── cli/                  # CLI 工具 (Go + Cobra)
-│   ├── cmd/              # 命令定义
-│   ├── internal/         # Hook 注入、配置管理
-│   └── main.go
-├── server/               # 后端服务 (Go + Gin)
-│   ├── api/              # HTTP 路由处理
-│   ├── model/            # GORM 数据模型
-│   ├── service/          # 业务逻辑层
-│   ├── ws/               # WebSocket Hub
-│   ├── db/               # 数据库连接 (SQLite/PG)
-│   └── main.go
-├── web/                  # 前端 (React + Vite)
-│   ├── src/
-│   │   ├── components/   # 可复用 UI 组件
-│   │   ├── pages/        # 路由页面
-│   │   ├── hooks/        # 自定义 React Hooks
-│   │   └── lib/          # API 客户端、WebSocket 客户端
-│   └── index.html
-├── migrations/           # 数据库迁移文件
-├── docker-compose.yml    # 生产部署配置
-└── .fluxcore/            # 本地配置 (已 gitignore)
-```
-
-## 下一步建议
-
-当前所有阶段均处于 **未开始** 状态。建议从 **阶段一** 入手，按以下顺序推进：
-
-1. **先确定技术选型细节**：例如 Go 模块路径命名、前端包管理器选用 npm/pnpm/yarn、数据库迁移工具选择。
-2. **再并行启动后端框架搭建与前端脚手架**：两者无强依赖，可独立进行。
-3. **CLI 模块随后接入**：需等后端有基础 API 后才具备实际联调意义，但框架可先行搭建。
+所有功能分支合入 `develop`；`main` 只接收经过阶段验收的 `develop`。

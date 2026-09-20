@@ -25,16 +25,16 @@ Most project management tools force developers into a **dual-loop workflow** —
 
 | Pain Point | Traditional Tools | FluxCore |
 | :--- | :--- | :--- |
-| Progress tracking | Manual timesheets / ticket updates | Auto-generated from commits |
+| Development facts | Manual timesheets / ticket updates | Recorded from commits |
 | Project status | Stale dashboards, outdated docs | Real-time via WebSocket |
-| Multi-project switching | Scattered terminals, lost context | `fluxcore switch` restores everything |
-| README as source of truth | Disconnected from dev flow | Parsed & synced on every push |
+| Multi-project recovery | Scattered terminals, lost context | Resume context from facts and intent |
+| Project metadata | README becomes stale | Validated `fluxcore.yaml` (planned) |
 
 ## Core Philosophy
 
-- **Invisible Logging** — No manual timesheets. Git Hooks + Commit Message parsing auto-generate structured activity logs.
+- **Invisible Logging** — No manual timesheets. Git facts generate structured activity logs; commit text only creates semantic signals that require confirmation.
 - **Real-Time Feedback** — Jenkins-like immediacy. Push your code, and the Web dashboard refreshes via WebSocket within milliseconds.
-- **Context Awareness** — Whether you're in the CLI or the Web UI, FluxCore intelligently detects the current project state and README metadata.
+- **Context Awareness** — Commit, branch, push reports, and optional intent form an explainable project state.
 
 ## Architecture
 
@@ -90,10 +90,8 @@ git commit -m "feat: #101 implement payment API"
 git push
 
 # 3. Everything else is automatic
-#    → CLI: push confirmation in terminal
-#    → Web: project card version bumps instantly,
-#           timeline shows new log entry,
-#           task #101 auto-transitions to "Testing"
+#    → FluxCore: records local commits and push reports separately
+#    → Web: shows activity facts, delivery state, and task-link signals
 ```
 
 ## Project Structure
@@ -125,7 +123,7 @@ FluxCore/
 
 ## Getting Started
 
-> **Note:** FluxCore is under active development. The following instructions reflect the target setup.
+> **Note:** FluxCore is under active development. Phase-one project binding and the Web project list are available; event capture is still in development.
 
 ### Prerequisites
 
@@ -147,8 +145,19 @@ API_TOKEN=local-dev-token go run .
 # Start the frontend (in a new terminal)
 cd web
 npm install && npm run dev
+```
 
-# Install the CLI
+The Web console can also be previewed without starting the backend. Use the local Demo account on the login page:
+
+```text
+Account: demo@fluxcore.local
+Password: fluxcore-demo
+```
+
+Demo mode is for local preview only. The project list and new projects use mock data in the current browser session and never write to the backend database.
+
+```bash
+# Install the CLI (from the repository root)
 cd cli
 go install .
 

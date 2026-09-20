@@ -1,281 +1,167 @@
 # FluxCore v0.1 架构基线
 
-> 本文档用于在进入阶段一开发前固化最小架构边界。目标不是完整详细设计，而是避免核心模型、事件链路和模块职责在开发中反复返工。
+本文定义 FluxCore 当前架构边界。v0.1 面向本机单用户使用，先建立可靠事实链路和可用 Web 工作台，再扩展远端平台与智能能力。
 
 ## 架构目标
 
-v0.1 的目标是跑通个人开发者本地多项目研发状态记录闭环：
-
 ```text
-Git Repository → Git Hook → fluxcore CLI → Backend API → Database → Web UI
+Git Repository → CLI / Local Outbox → Backend API → Database → Web UI
 ```
 
-v0.1 优先保证本地开发链路稳定，不优先接入远程 Git 平台 Webhook。远程 Webhook 后续作为增强能力，用于获得更权威的 push、merge、CI 与远端仓库事件。
+v0.1 不依赖公网回调、Redis、多用户账号体系或远端 Git 平台。外部平台事件后续用于补充 push、merge 和 CI 的远端确认，不覆盖已经记录的本地事实。
 
 ## 设计原则
 
-- **Local-first**：优先服务个人开发者本地多项目并发场景，降低部署和接入成本。
-- **Event-first**：底层以事件流记录开发事实，任务、日志、开发流状态均从事件派生。
-- **Deterministic-first**：早期状态判断使用确定性规则，AI 只做总结、解释和建议，不作为底层状态真值。
-- **MVP 克制**：只实现阶段一、阶段二所需的最小闭环，为 Intent Snapshot 与 Workstream Radar 预留结构，不提前实现复杂能力。
+- **Local-first**：默认 SQLite、本机服务和单用户 token。
+- **Event-first**：不可变事件记录事实，展示状态从事实派生。
+- **Deterministic-first**：规则计算底层状态，AI 只提供摘要、解释和建议。
+- **Confidence-aware**：事实、报告、推断和用户确认必须区分，不能混成一个状态。
+- **Non-blocking Git**：FluxCore 故障不能阻止 commit 或 push。
+- **MVP restraint**：Web 基础工作流优先；CLI 事件扩展在其后推进。
 
-## 事件链路
+## 四层状态模型
 
-### v0.1 主链路
+FluxCore 不把“提交了”“推送了”“服务收到了”和“任务完成了”压成一个字段。
 
 ```text
-git commit
-  ↓
-post-commit hook
-  ↓
-fluxcore CLI hook handler
-  ↓
-POST /api/events
-  ↓
-Backend event service
-  ↓
-SQLite
-  ↓
-Web UI query / later WebSocket push
+事实层      commit、branch、push report
+同步层      pending、sent、accepted、failed
+投影层      activity、publication、risk、suggested_action
+语义层      Task signal、Intent、README observation、AI summary
 ```
 
-**职责边界**
-- Git Hook：只负责触发 CLI，不承担业务判断。
-- CLI：读取仓库路径、当前分支、commit SHA、remote URL、本地配置 token，并发送事件。
-- Backend：校验 token，接收事件，解析 commit message，写入结构化数据。
-- Web UI：读取后端聚合结果，不直接访问本地 Git 仓库。
+### 事实层
 
-### 延后链路
+- commit 是本地仓库已发生的确定事实，保留 SHA、branch、message 和 occurred_at。
+- branch 是 commit 发生时的上下文，不从命名直接推导任务真值。
+- push report 表示某个观察来源报告 push 成功；必须记录来源，不能冒充远端确认。
+- v0.1 不实现远端确认，后续由 Git 平台事件补齐。
 
-远程 Webhook 不进入 v0.1 主路径，后续用于补充：
+### 同步层
 
-- GitHub / GitLab / Gitea push 事件
-- Pull Request / Merge Request 状态
-- CI 构建结果
-- 远端默认分支变化
+每个待上报事实进入本地 outbox，并独立维护：
 
-这样可以避免 MVP 阶段同时处理平台适配、Webhook 鉴权、公网回调和本地服务暴露问题。
+```text
+pending → sent → accepted
+              ↘ failed → retry
+```
+
+- Hook 只采集并写入本地队列，不等待后端业务处理。
+- 网络或服务不可用时事件不能丢失。
+- 后端以幂等键拒绝重复写入，但重复投递不视为失败。
+
+### 投影层
+
+Workstream 是计算视图，不在 v0.1 建立强实体。状态按多个维度共存：
+
+```text
+activity:         active / idle / stale
+publication:      local_only / push_pending / pushed / remote_confirmed
+risk:             none / blocked / diverged / conflict
+suggested_action: none / resume / review / merge
+```
+
+`Ready to Resume` 和 `Ready to Merge` 是建议动作，不是与 `Blocked`、`Diverged` 互斥的生命周期状态。
+
+### 语义层
+
+- Task 必须显式创建，或由用户确认与现有 Task 的关联。
+- commit message 和分支名只产生低置信度信号，不自动创建 Task，也不自动推进状态。
+- Intent Snapshot 可选；缺少 Intent 不影响事实采集。
+- README 只产生低可信观察信号，不直接更新 Project 状态。
+- AI 输出始终是可重新生成的解释，不是事实来源。
+
+## push 观测边界
+
+标准客户端 Git 没有 `post-push` hook。`pre-push` 发生在远端接受之前，因此不能作为成功证据。
+
+后续实现需要在以下来源中明确选择并记录来源类型：
+
+1. `fluxcore push` 包装命令：执行真实 `git push`，仅在退出码成功后写入 push report。
+2. Shell 集成：观察用户原始命令及退出结果，接入成本更高。
+3. 远端平台 Webhook：可提供权威远端确认，但不属于本地 v0.1。
+
+在该决策完成前，不实现伪造的 `post-push` hook，也不把 `pre-push` 当成功状态。
 
 ## 核心领域模型
 
 ### Project
 
-项目实体，表示用户关心的产品、工具或研发对象。
-
-关键字段：
-- `id`
-- `name`
-- `description`
-- `status`
-- `created_at`
-- `updated_at`
+用户关心的产品或研发对象。当前字段包括 `id`、`name`、`description`、`status` 和时间戳。
 
 ### Repository
 
-Git 仓库实体。v0.1 可按一个 Project 对应一个 Repository 实现，但模型上保留多仓扩展能力。
+Project 下的 Git 仓库。模型支持一个 Project 对应多个 Repository，当前字段包括本地路径、remote URL 和默认分支。
 
-关键字段：
-- `id`
-- `project_id`
-- `name`
-- `local_path`
-- `remote_url`
-- `default_branch`
-- `created_at`
-- `updated_at`
+### Event（阶段二）
 
-### Branch
+不可变事实表，至少包含：
 
-仓库分支状态。用于后续判断开发流是否活跃、停滞或偏离主干。
+- `id`、`event_type`、`source`
+- `project_id`、`repository_id`
+- `branch_name`、`commit_sha`
+- `payload`、`occurred_at`、`received_at`
+- 客户端生成的幂等键
 
-关键字段：
-- `id`
-- `repository_id`
-- `name`
-- `head_sha`
-- `base_branch`
-- `last_seen_at`
-- `created_at`
-- `updated_at`
+最小事件类型计划为 `project_created`、`repository_linked`、`commit_observed` 和 `push_reported`。
 
-### Task
+### Task（阶段二后半）
 
-任务实体。v0.1 通过 commit message 中的 `#TaskID` 或后续手动创建关联。
+显式语义实体。Task 状态独立于 Git 活动变更，任何自动建议必须保留证据和待确认状态。
 
-关键字段：
-- `id`
-- `project_id`
-- `external_ref`
-- `title`
-- `status`
-- `source`
-- `created_at`
-- `updated_at`
+### Intent（可选、后续）
 
-状态建议：
+用户主动记录的开发意图，可关联分支、Task 和一段事件区间。它用于恢复上下文，不是使用 FluxCore 的强制步骤。
 
-```text
-Open → In Progress → Testing → Done
-```
+### Machine Metadata（阶段三）
 
-### Event
+`fluxcore.yaml` 是计划中的显式机器元数据入口，必须有版本化 schema 和校验错误。README 不承担该职责。
 
-事件实体。Event 是 FluxCore 的底层事实表，其他视图和状态尽量从事件派生。
+## 当前 API 边界
 
-关键字段：
-- `id`
-- `project_id`
-- `repository_id`
-- `branch_name`
-- `event_type`
-- `source`
-- `commit_sha`
-- `message`
-- `payload`
-- `occurred_at`
-- `received_at`
+阶段一已经提供：
 
-v0.1 最小事件类型：
-- `project_created`
-- `repository_linked`
-- `commit_observed`
-- `task_detected`
-
-后续预留事件类型：
-- `readme_updated`
-- `ci_status_changed`
-- `intent_created`
-- `branch_diverged`
-- `workstream_state_changed`
-
-### User 与 Config
-
-v0.1 不实现完整注册登录系统。
-
-- `User` 可保留为单用户占位模型，不进入复杂权限体系。
-- `Config` 用于服务端运行配置与本地 CLI 配置映射。
-- 认证使用本地单用户 token，避免过早引入账号系统。
-
-## Workstream 预留设计
-
-Workstream 不建议在 v0.1 作为独立强实体实现，先作为可计算视图预留。
-
-```text
-Workstream = Project + Repository + Branch + optional Task + optional Intent + latest Events
-```
-
-后续 Workstream Radar 可基于确定性规则判断：
-
-- `Active`：近期有 commit、push、README 或任务状态变化。
-- `Idle`：一段时间无进展，但仍存在未关闭任务、未合并分支或未完成 intent。
-- `Blocked`：存在失败 CI、冲突风险、缺少后续动作或关键状态卡住。
-- `Diverged`：分支明显落后主干，继续开发或合并前需要同步。
-- `Ready to Resume`：可恢复开发，并能展示上次意图、最后变更与下一步建议。
-- `Ready to Merge`：功能完成度高，测试或合并是下一动作。
-
-v0.1 只需保证事件、分支、任务数据足以支撑后续计算，不实现完整雷达算法。
-
-## 阶段一 API 边界
-
-阶段一 API 只服务基础绑定与可见性。
-
-必需接口：
 - `GET /health`
 - `POST /api/projects`
-- `GET /api/projects`
+- `GET /api/projects`，包含 `repository_count`
 - `POST /api/projects/:project_id/repositories`
 - `GET /api/projects/:project_id/repositories`
 
-阶段二再引入：
+阶段二计划引入：
+
 - `POST /api/events`
 - `GET /api/projects/:project_id/events`
-- `GET /api/projects/:project_id/tasks`
+- Task 创建、查询和关联确认接口
 
-接口原则：
-- CLI 只调用后端 API，不直接写数据库。
-- Web UI 只调用后端 API，不读取 CLI 本地配置。
-- 后端负责统一生成数据库 ID、校验 token、维护事件一致性。
-
-## 数据库策略
-
-v0.1 使用 SQLite 作为默认数据库，保持零配置启动。
-
-PostgreSQL 从模型和 GORM 配置层面预留：
-
-- 通过 `DB_TYPE=sqlite|postgres` 切换。
-- 避免使用 SQLite 独有 SQL 特性。
-- 主键、时间字段、JSON 字段需要选择兼容 GORM 的写法。
-
-迁移策略：
-- 阶段一可使用 GORM AutoMigrate。
-- 进入多环境部署或 PostgreSQL 前，再引入显式迁移工具。
-
-## 认证策略
-
-v0.1 使用本地单用户 token：
-
-- 服务端启动时从环境变量或配置文件读取 token。
-- CLI 在 `.fluxcore/` 本地配置中保存 token。
-- API 请求通过 `Authorization: Bearer <token>` 认证。
-
-暂不实现：
-- 多用户注册登录
-- OAuth
-- RBAC 权限模型
-- 团队空间
+CLI 和 Web 的正式工作流只调用后端 API，不直接写数据库。Web 不读取 CLI 本地配置；浏览器 token 由用户在运行时输入并保存在 `sessionStorage`。为便于本地视觉验收，Web 另提供隔离的 Demo 账号：该模式完全使用浏览器 `sessionStorage` 中的 mock 项目，不发送 API 请求，也不代表后端事实。
 
 ## 模块职责
 
 ### CLI
 
-负责：
-- `fluxcore init`
-- `fluxcore link`
-- `fluxcore status`
-- Git Hook 注入
-- 本地 `.fluxcore/` 配置读写
-- 事件上报
-
-不负责：
-- 任务状态计算
-- Workstream 状态判断
-- 数据库存储
+当前负责初始化、绑定和状态检查。阶段二增加事实采集、本地 outbox、重试和明确的 push 观测入口；不负责 Workstream 计算或数据库写入。
 
 ### Backend
 
-负责：
-- REST API
-- token 认证
-- 领域模型持久化
-- commit message 解析
-- 事件写入与查询
-- 后续 WebSocket 广播
-
-不负责：
-- 直接操作用户本地 Git 仓库
-- 启动或控制用户编辑器、终端会话
+负责认证、API、领域持久化、事件幂等和确定性投影。它不直接操作用户 Git 仓库，也不从低置信度文本擅自改变任务状态。
 
 ### Web
 
-负责：
-- 项目列表
-- 项目详情
-- 任务与日志展示
-- 后续实时事件流与 Workstream Radar
+负责项目创建、列表、详情和后续 Workstream 视图。v0.1 通过 Vite 本地代理访问后端，不为本地开发开放宽泛 CORS。
 
-不负责：
-- 直接读取本地文件系统
-- 直接执行 Git 命令
+## 数据库与认证
 
-## v0.1 暂不实现
+- SQLite 是 v0.1 默认数据库；PostgreSQL 保持模型兼容。
+- 当前使用 GORM AutoMigrate，进入多环境部署前再引入显式迁移工具。
+- 认证为本地单用户 Bearer token，不实现注册、OAuth、RBAC 或团队空间。
 
-- 远程 Git 平台 Webhook
-- 完整多用户系统
-- 完整 Workstream Radar 算法
+## 明确延后
+
+- Git 远端平台 Webhook
+- 远端 push / merge / CI 确认
+- 完整 Workstream Radar
 - Intent Snapshot 命令与 UI
-- AI 总结
-- 插件系统
-- Docker Compose 生产部署
-- Slack / Discord / 邮件通知
+- Redis 和 WebSocket
+- AI 总结、插件、通知与生产部署
 
-这些能力保留在规划中，但不进入第一轮基础设施开发范围。
+这些能力必须建立在阶段一 Web 可用性和阶段二可靠事实投递之上。

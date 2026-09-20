@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jaxson/FluxCore/server/model"
 	"gorm.io/gorm"
@@ -34,6 +35,18 @@ type CreateRepositoryInput struct {
 	DefaultBranch string
 }
 
+// ProjectListItem is the compact project projection used by the Web dashboard.
+// RepositoryCount is computed in the same query so clients do not need an N+1 request pattern.
+type ProjectListItem struct {
+	ID              uint                `json:"id"`
+	Name            string              `json:"name"`
+	Description     string              `json:"description"`
+	Status          model.ProjectStatus `json:"status"`
+	RepositoryCount int64               `json:"repository_count"`
+	CreatedAt       time.Time           `json:"created_at"`
+	UpdatedAt       time.Time           `json:"updated_at"`
+}
+
 func NewProjectService(conn *gorm.DB) *ProjectService {
 	return &ProjectService{conn: conn}
 }
@@ -62,13 +75,16 @@ func (svc *ProjectService) CreateProject(input CreateProjectInput) (model.Projec
 	return project, nil
 }
 
-func (svc *ProjectService) ListProjects() ([]model.Project, error) {
+func (svc *ProjectService) ListProjects() ([]ProjectListItem, error) {
 	if err := svc.ensureConnection(); err != nil {
 		return nil, err
 	}
 
-	var projects []model.Project
-	if err := svc.conn.Order("id ASC").Find(&projects).Error; err != nil {
+	var projects []ProjectListItem
+	query := svc.conn.Model(&model.Project{}).
+		Select("projects.id, projects.name, projects.description, projects.status, projects.created_at, projects.updated_at, (SELECT COUNT(*) FROM repositories WHERE repositories.project_id = projects.id) AS repository_count").
+		Order("projects.id ASC")
+	if err := query.Scan(&projects).Error; err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
 
