@@ -17,6 +17,7 @@ func Migrate(conn *gorm.DB) error {
 		&model.Repository{},
 		&model.User{},
 		&model.Config{},
+		&model.Event{},
 	); err != nil {
 		return fmt.Errorf("auto migrate database: %w", err)
 	}

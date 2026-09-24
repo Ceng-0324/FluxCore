@@ -29,6 +29,7 @@ func newInitCommand(options *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			inspector := localgit.NewInspector(workingDir)
 
 			cfg, err := localconfig.NewStore(root).Init(localconfig.InitOptions{
 				ServerURL:    options.server,
@@ -40,12 +41,29 @@ func newInitCommand(options *rootOptions) *cobra.Command {
 				return err
 			}
 
+			if err := localconfig.NewStore(root).EnsureGitignored(); err != nil {
+				return err
+			}
+			hooksPath, err := inspector.GitHooksPath(ctx, root)
+			if err != nil {
+				return err
+			}
+			installed, err := localconfig.NewStore(root).InstallPostCommitHook(hooksPath)
+			if err != nil {
+				return err
+			}
+
 			fmt.Fprintf(cmd.OutOrStdout(), "Initialized FluxCore config at %s/%s\n", localconfig.DirectoryName, localconfig.FileName)
 			fmt.Fprintf(cmd.OutOrStdout(), "Server: %s\n", cfg.ServerURL)
 			if cfg.Token != "" {
 				fmt.Fprintln(cmd.OutOrStdout(), "Token: configured")
 			} else {
 				fmt.Fprintln(cmd.OutOrStdout(), "Token: not configured")
+			}
+			if installed {
+				fmt.Fprintln(cmd.OutOrStdout(), "Hook: post-commit installed")
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "Hook: post-commit already configured")
 			}
 			return nil
 		},

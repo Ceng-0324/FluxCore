@@ -23,6 +23,7 @@ func TestMigrateCreatesPhaseOneTables(t *testing.T) {
 		&model.Repository{},
 		&model.User{},
 		&model.Config{},
+		&model.Event{},
 	} {
 		if !conn.Migrator().HasTable(table) {
 			t.Fatalf("expected table for %T to exist", table)

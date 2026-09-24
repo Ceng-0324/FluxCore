@@ -15,6 +15,8 @@ import (
 
 const maxResponseBodyBytes = 1 << 20
 
+const EventTypeCommitObserved = "commit_observed"
+
 var ErrConflict = errors.New("fluxcore api conflict")
 
 type Client struct {
@@ -45,6 +47,32 @@ type Repository struct {
 
 type CreateProjectInput struct {
 	Name string
+}
+
+type Event struct {
+	ID             uint      `json:"id"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	EventType      string    `json:"event_type"`
+	Source         string    `json:"source"`
+	ProjectID      uint      `json:"project_id"`
+	RepositoryID   uint      `json:"repository_id"`
+	BranchName     string    `json:"branch_name"`
+	CommitSHA      string    `json:"commit_sha"`
+	Payload        string    `json:"payload"`
+	OccurredAt     time.Time `json:"occurred_at"`
+	ReceivedAt     time.Time `json:"received_at"`
+}
+
+type CreateEventInput struct {
+	IdempotencyKey string    `json:"idempotency_key"`
+	EventType      string    `json:"event_type"`
+	Source         string    `json:"source"`
+	ProjectID      uint      `json:"project_id"`
+	RepositoryID   uint      `json:"repository_id"`
+	BranchName     string    `json:"branch_name"`
+	CommitSHA      string    `json:"commit_sha"`
+	Payload        string    `json:"payload"`
+	OccurredAt     time.Time `json:"occurred_at"`
 }
 
 type CreateRepositoryInput struct {
@@ -184,6 +212,17 @@ func (client *Client) ListRepositories(ctx context.Context, projectID uint) ([]R
 		return nil, err
 	}
 	return response.Repositories, nil
+}
+
+func (client *Client) CreateEvent(ctx context.Context, input CreateEventInput) (Event, bool, error) {
+	var response struct {
+		Event   Event `json:"event"`
+		Created bool  `json:"created"`
+	}
+	if err := client.doJSON(ctx, http.MethodPost, "/api/events", input, &response); err != nil {
+		return Event{}, false, err
+	}
+	return response.Event, response.Created, nil
 }
 
 func (client *Client) doJSON(ctx context.Context, method string, path string, requestBody interface{}, responseBody interface{}) error {

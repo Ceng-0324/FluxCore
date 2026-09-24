@@ -24,6 +24,12 @@ type Repository struct {
 	CurrentBranch string
 }
 
+type Commit struct {
+	SHA        string
+	Subject    string
+	OccurredAt string
+}
+
 type Inspector struct {
 	workingDir string
 	run        commandRunner
@@ -125,6 +131,30 @@ func (inspector Inspector) CurrentBranch(ctx context.Context, root string) (stri
 		return "", fmt.Errorf("read current branch: %w", err)
 	}
 	return strings.TrimSpace(branch), nil
+}
+
+func (inspector Inspector) GitHooksPath(ctx context.Context, root string) (string, error) {
+	path, err := inspector.run(ctx, root, "rev-parse", "--git-path", "hooks")
+	if err != nil {
+		return "", fmt.Errorf("read Git hooks path: %w", err)
+	}
+	path = strings.TrimSpace(path)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
+	return path, nil
+}
+
+func (inspector Inspector) HeadCommit(ctx context.Context, root string) (Commit, error) {
+	raw, err := inspector.run(ctx, root, "show", "-s", "--format=%H%x00%cI%x00%s", "HEAD")
+	if err != nil {
+		return Commit{}, fmt.Errorf("read HEAD commit: %w", err)
+	}
+	parts := strings.SplitN(strings.TrimSpace(raw), "\x00", 3)
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" {
+		return Commit{}, fmt.Errorf("read HEAD commit: unexpected git output")
+	}
+	return Commit{SHA: parts[0], OccurredAt: parts[1], Subject: parts[2]}, nil
 }
 
 func (inspector Inspector) DefaultBranch(ctx context.Context, root string, currentBranch string) (string, error) {

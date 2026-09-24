@@ -56,6 +56,8 @@ func newRootCommandWithOptions(options *rootOptions) *cobra.Command {
 	rootCmd.AddCommand(newInitCommand(options))
 	rootCmd.AddCommand(newLinkCommand(options))
 	rootCmd.AddCommand(newStatusCommand(options))
+	rootCmd.AddCommand(newObserveCommand(options))
+	rootCmd.AddCommand(newSyncCommand(options))
 
 	rootCmd.SetHelpCommand(&cobra.Command{
 		Use:    "help",
