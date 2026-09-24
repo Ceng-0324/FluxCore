@@ -266,6 +266,8 @@ func writeServiceError(ctx *gin.Context, err error) {
 		writeAPIError(ctx, http.StatusConflict, "conflict", "repository local_path already exists")
 	case errors.Is(err, service.ErrRepositoryConflict):
 		writeAPIError(ctx, http.StatusConflict, "conflict", "repository conflicts with an existing repository")
+	case errors.Is(err, service.ErrEventConflict):
+		writeAPIError(ctx, http.StatusConflict, "event_conflict", "idempotency key already belongs to different event data")
 	default:
 		_ = ctx.Error(err)
 		writeAPIError(ctx, http.StatusInternalServerError, "internal_error", "internal server error")

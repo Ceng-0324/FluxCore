@@ -5,6 +5,7 @@ import "time"
 const (
 	DirectoryName = ".fluxcore"
 	FileName      = "config.json"
+	OutboxName    = "outbox"
 )
 
 type Config struct {

@@ -16,12 +16,12 @@ func NewRouter(cfg config.Config, conn *gorm.DB) *gin.Engine {
 		panic(err)
 	}
 
-	registerRoutes(router, cfg, service.NewProjectService(conn))
+	registerRoutes(router, cfg, service.NewProjectService(conn), service.NewEventService(conn))
 
 	return router
 }
 
-func registerRoutes(router *gin.Engine, cfg config.Config, projects *service.ProjectService) {
+func registerRoutes(router *gin.Engine, cfg config.Config, projects *service.ProjectService, events *service.EventService) {
 	router.GET("/health", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{
 			"database": gin.H{
@@ -35,6 +35,7 @@ func registerRoutes(router *gin.Engine, cfg config.Config, projects *service.Pro
 	api := router.Group("/api")
 	api.Use(requireAPIToken(cfg.Security.APIToken))
 	registerProjectRoutes(api, projects)
+	registerEventRoutes(api, events)
 
 	router.NoRoute(func(ctx *gin.Context) {
 		if isAPIPath(ctx.Request.URL.Path) && !isAuthorized(ctx.GetHeader("Authorization"), cfg.Security.APIToken) {

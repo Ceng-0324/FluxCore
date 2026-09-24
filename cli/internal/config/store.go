@@ -166,6 +166,34 @@ func (store Store) directoryPath() string {
 	return filepath.Join(store.repositoryRoot, DirectoryName)
 }
 
+func (store Store) InstallPostCommitHook(hooksPath string) (bool, error) {
+	if strings.TrimSpace(hooksPath) == "" {
+		return false, fmt.Errorf("Git hooks path is required")
+	}
+	if err := os.MkdirAll(hooksPath, 0o700); err != nil {
+		return false, fmt.Errorf("create Git hooks directory: %w", err)
+	}
+	path := filepath.Join(hooksPath, "post-commit")
+	const marker = "# FluxCore post-commit hook"
+	if existing, err := os.ReadFile(path); err == nil {
+		if bytes.Contains(existing, []byte(marker)) {
+			return false, nil
+		}
+		return false, fmt.Errorf("post-commit hook already exists; refusing to overwrite it")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, fmt.Errorf("read post-commit hook: %w", err)
+	}
+	content := "#!/bin/sh\n" + marker + "\n" + "command -v fluxcore >/dev/null 2>&1 && fluxcore observe commit >/dev/null 2>&1 || true\n"
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		return false, fmt.Errorf("write post-commit hook: %w", err)
+	}
+	return true, nil
+}
+
+func (store Store) OutboxPath() string {
+	return filepath.Join(store.directoryPath(), OutboxName)
+}
+
 func hasGitignoreEntry(data []byte, entry string) bool {
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
